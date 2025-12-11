@@ -49,21 +49,20 @@ O = [C; C*A; C*A*A; C*A*A*A; C*A*A*A*A];
 rank(O);
 
 %% Open loop response
-x0 = [ 30000;5000;5000;0.5;0.8];
+x0 = [ 30000;9500;5000;0.5;0.95];
 ref = [0 ; 10];
 
 %% State feedback controller 
 
 %Step 1: Find optimal state feedback gains via LQR (w = v = 0), u = kx
-Q = [1/1000^2, 0, 0, 0, 0;
-    0, 1/500^2, 0, 0, 0;
-    0, 0, 1/100^2, 0, 0;
-    0, 0, 0, 0.1, 0;
-    0, 0, 0, 0, 0.1];
-R = [1/430^2, 0;
-    0, 1/160^2;
-    ];
-[K, P, CLP] = lqr(A,B,Q,R);
+xnom = [5000; 500; 500; 0.5; 0.00005]; 
+Qn = diag(1./(xnom.^2));             % penalize relative errors
+
+% scale control penalty similarly (units of u1 = bees/day, u2 = flowers/day)
+% choose R so that one "max" action is reasonably expensive:
+R = diag([700/(1000^2), 700/(100^2)]); % tune these to increase/decrease aggressiveness
+[K,~,~] = lqr(A,B,Qn,R);
+
 
 % Step 2: Design precompensator
 Csel = C([2 3],:);      % only care about number of flowers and flower health
@@ -93,6 +92,7 @@ ref2 = [10000 ;1]; %I want 10,000 flowers in perfect health
 load_system('FinalProjectSim');
 Out = sim("FinalProjectSim.slx");
 uncontrolled2 = Out.uncontrolled2;
+controlled = Out.controlled;
 
 tu = uncontrolled2.time;
 yu = uncontrolled2.signals.values;   % (N x 3)
@@ -100,6 +100,11 @@ yu = uncontrolled2.signals.values;   % (N x 3)
 tc = controlled.time;
 yc = controlled.signals.values;      % (N x 3)
 
+ee = Out.estimator_error.signals.values;
+
+ci = Out.control_input.signals.values;
+
+%plot for uncontrolled system
 figure;
 subplot(3,1,1)
 plot(tu, yu(:,1), 'LineWidth', 1.4)
@@ -115,6 +120,7 @@ plot(tu, yu(:,3), 'LineWidth', 1.4)
 ylabel('Flower Health')
 xlabel('Time (days)')
 
+%plot for Controlled System
 figure;
 subplot(3,1,1)
 plot(tc, yc(:,1), 'LineWidth', 1.4)
@@ -129,5 +135,33 @@ subplot(3,1,3)
 plot(tc, yc(:,3), 'LineWidth', 1.4)
 ylabel('Flower Health')
 xlabel('Time (days)')
+
+%plot for estimator error
+figure;
+subplot(3,1,1)
+plot(tc, ee(:,1)+ee(:,2), 'LineWidth', 1.4)
+ylabel('Total Bees')
+title('Estimator Error')
+
+subplot(3,1,2)
+plot(tc, ee(:,3), 'LineWidth', 1.4)
+ylabel('Total Flowers')
+
+subplot(3,1,3)
+plot(tc, ee(:,3), 'LineWidth', 1.4)
+plot(tc, ee(:,4), 'LineWidth', 1.4)
+ylabel('Flower Health/ Nectar Level')
+xlabel('Time (days)')
+
+%plot for control effort
+figure;
+subplot(2,1,1)
+plot(tc, ci(:,1), 'LineWidth', 1.4)
+ylabel('Adult Bees')
+title('Controller Input')
+
+subplot(2,1,2)
+plot(tc, ci(:,2), 'LineWidth', 1.4)
+ylabel('Flowers Planted')
 
 
